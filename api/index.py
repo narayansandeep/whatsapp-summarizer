@@ -7,8 +7,8 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Import the Flask app
 from app_flask import app
 
-# Flask app is the handler
-# Vercel will automatically use the Flask app
-handler = app
+# Vercel expects 'app' to be the Flask application object
+# No wrapper needed - Flask works directly with Vercel
