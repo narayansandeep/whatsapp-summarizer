@@ -8,6 +8,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from app_prod import app
+from mangum import Mangum
 
-# This is what Vercel looks for
-handler = app
+# Wrap FastAPI app with Mangum for serverless deployment
+handler = Mangum(app, lifespan="off")
