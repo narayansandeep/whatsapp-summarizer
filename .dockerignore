@@ -1,0 +1,19 @@
+.env
+.git
+.gitignore
+VectorDB/
+WhatsApp Chat/
+*.md
+*.ipynb
+__pycache__/
+*.pyc
+.DS_Store
+migrate_to_pinecone.py
+whatsappvector.py
+whatsappvector_pinecone.py
+app_test.py
+app.py
+Whatsapp.py
+Whatsapp.ipynb
+vercel.json
+api/
