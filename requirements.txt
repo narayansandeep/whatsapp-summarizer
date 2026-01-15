@@ -1,0 +1,6 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.11.0
+pandas==2.2.3
+# agents - NOTE: This refers to OpenAI's Agent Builder SDK, NOT the PyPI package
+# The OpenAI agents library needs to be installed separately per OpenAI's documentation
