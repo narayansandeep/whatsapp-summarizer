@@ -1,6 +1,6 @@
 """
 WhatsApp Running Coach Chat Application - Production Version
-Uses OpenAI API directly with local ChromaDB vector database
+Uses OpenAI API with Pinecone cloud vector database
 """
 
 from fastapi import FastAPI, HTTPException
@@ -11,8 +11,7 @@ import uuid
 from datetime import datetime, timedelta
 import asyncio
 import os
-import chromadb
-from chromadb.config import Settings
+from pinecone import Pinecone
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -22,49 +21,42 @@ load_dotenv()
 # Get the directory where this script is located
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-VECTOR_DB_FOLDER = "VectorDB"
-COLLECTION_NAME = "whatsapp_running_chat"
+PINECONE_INDEX_NAME = "whatsapp-chat"
 
 app = FastAPI()
 
 # Initialize OpenAI client
 client = OpenAI()
 
-# Initialize ChromaDB client (will be loaded on first use)
-chroma_client = None
-collection = None
+# Initialize Pinecone client (will be loaded on first use)
+pinecone_index = None
 
 # Session storage: {session_id: {"history": [...], "last_access": datetime}}
 sessions = {}
 
 def get_vector_db():
-    """Initialize and return the ChromaDB collection."""
-    global chroma_client, collection
+    """Initialize and return the Pinecone index."""
+    global pinecone_index
 
-    if collection is not None:
-        return collection
+    if pinecone_index is not None:
+        return pinecone_index
 
-    vector_db_path = os.path.join(BASE_DIR, VECTOR_DB_FOLDER)
-
-    if not os.path.exists(vector_db_path):
+    pinecone_api_key = os.getenv('PINECONE_API_KEY')
+    if not pinecone_api_key:
         raise Exception(
-            f"Vector database not found at {vector_db_path}. "
-            "Please run 'python3 whatsappvector.py' first to create the database."
+            "PINECONE_API_KEY not found in environment variables. "
+            "Please add it to your .env file or Vercel environment variables."
         )
 
-    chroma_client = chromadb.PersistentClient(
-        path=vector_db_path,
-        settings=Settings(anonymized_telemetry=False)
-    )
-
     try:
-        collection = chroma_client.get_collection(name=COLLECTION_NAME)
-        print(f"✅ Loaded vector database: {COLLECTION_NAME}")
-        return collection
+        pc = Pinecone(api_key=pinecone_api_key)
+        pinecone_index = pc.Index(PINECONE_INDEX_NAME)
+        print(f"✅ Connected to Pinecone index: {PINECONE_INDEX_NAME}")
+        return pinecone_index
     except Exception as e:
         raise Exception(
-            f"Failed to load collection '{COLLECTION_NAME}'. "
-            f"Please run 'python3 whatsappvector.py' first. Error: {e}"
+            f"Failed to connect to Pinecone index '{PINECONE_INDEX_NAME}'. "
+            f"Please ensure the index exists and your API key is correct. Error: {e}"
         )
 
 def search_whatsapp_context(query: str, n_results: int = 5) -> List[str]:
@@ -78,7 +70,7 @@ def search_whatsapp_context(query: str, n_results: int = 5) -> List[str]:
     Returns:
         List of relevant chat excerpts
     """
-    collection = get_vector_db()
+    index = get_vector_db()
 
     # Generate embedding for the query
     response = client.embeddings.create(
@@ -87,16 +79,21 @@ def search_whatsapp_context(query: str, n_results: int = 5) -> List[str]:
     )
     query_embedding = response.data[0].embedding
 
-    # Search in ChromaDB
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=n_results
+    # Search in Pinecone
+    results = index.query(
+        vector=query_embedding,
+        top_k=n_results,
+        include_metadata=True
     )
 
-    # Extract and return the documents
-    if results and results['documents']:
-        return results['documents'][0]  # Returns list of matching documents
-    return []
+    # Extract and return the documents from metadata
+    documents = []
+    if results and results.get('matches'):
+        for match in results['matches']:
+            if 'metadata' in match and 'text' in match['metadata']:
+                documents.append(match['metadata']['text'])
+
+    return documents
 
 async def get_ai_response(user_message: str, conversation_history: List[Dict]) -> str:
     """
